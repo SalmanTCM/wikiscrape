@@ -1,40 +1,34 @@
 import os
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
 
-def get_wikipedia_ambiguity(entity):
-    """Fetches all possible meanings and source links from Bangla Wikipedia."""
-    base_url = "https://bn.wikipedia.org/wiki/"
-    url = f"{base_url}{entity}"
+# Your Browse AI API Key (Replace with your actual key)
+BROWSE_AI_API_KEY = "855d7c74-bdc9-4732-a004-7885772bbed9:f0bec6a7-d504-415e-b6e0-3b384dfb0d18"
+BROWSE_AI_TASK_ID = "40a3dace-c072-4ebf-b975-386548458fcd"
+
+def get_browse_ai_data(entity):
+    """Fetch ambiguity data using Browse AI"""
+    url = f"https://api.browse.ai/v2/tasks/{BROWSE_AI_TASK_ID}/execute"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        "Authorization": f"Bearer {BROWSE_AI_API_KEY}",
+        "Content-Type": "application/json"
     }
-
+    
+    data = {"inputs": {"entity": entity}}
+    
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.post(url, json=data, headers=headers, timeout=15)
         response.raise_for_status()
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        disambiguation_links = soup.select(".mw-disambig .mw-parser-output ul li a")
-        if disambiguation_links:
-            meanings = []
-            links = []
-            for link in disambiguation_links:
-                text = link.get_text(strip=True)
-                href = link.get("href")
-                if href:
-                    full_link = f"https://bn.wikipedia.org{href}"
-                    meanings.append(text)
-                    links.append(full_link)
-            
-            return "; ".join(meanings), "; ".join(links)
-        paragraph = soup.find("p")
-        if paragraph:
-            return paragraph.get_text(strip=True), url
-        else:
-            return "No relevant information found", url
+        
+        result = response.json()
+        
+        if "outputs" in result and result["outputs"]:
+            ambiguity_data = result["outputs"].get("ambiguity_data", "No data found")
+            source_links = result["outputs"].get("source_links", "No links found")
+            return ambiguity_data, source_links
+        
+        return "No data found", "No links found"
 
     except requests.exceptions.RequestException as e:
         return f"Error: {str(e)}", ""
@@ -67,7 +61,7 @@ def main():
         if pd.isna(row["Ambiguity Data"]) or row["Ambiguity Data"] == "":
             entity_name = row[entity_column]
             print(f"Fetching ambiguity data for: {entity_name}")
-            meanings, links = get_wikipedia_ambiguity(entity_name)
+            meanings, links = get_browse_ai_data(entity_name)
             df.at[index, "Ambiguity Data"] = meanings
             df.at[index, "Source Links"] = links
             print(f"🔍 Ambiguity Data: {meanings}")
